@@ -22,6 +22,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Slf4j
 @Controller
@@ -31,14 +32,18 @@ public class AlbumsController {
 
     private final RestTemplate restTemplate;
 
+    private final WebClient webClient;
+
     public AlbumsController(OAuth2AuthorizedClientService oauthClientService,
-                            RestTemplate restTemplate) {
+                            RestTemplate restTemplate,
+                            WebClient webClient) {
         this.oauthClientService = oauthClientService;
         this.restTemplate = restTemplate;
+        this.webClient = webClient;
     }
 
-    @GetMapping("/albums")
-    public String getAlbums(Model model,
+    @GetMapping("/albums-old")
+    public String getAlbumsOld(Model model,
                             @AuthenticationPrincipal OidcUser principal,
                             Authentication authentication) {
         // Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -52,7 +57,7 @@ public class AlbumsController {
         OAuth2AuthenticationToken oauthToken = (OAuth2AuthenticationToken) authentication;
         OAuth2AuthorizedClient oAuth2Client
                 = oauthClientService.loadAuthorizedClient(oauthToken.getAuthorizedClientRegistrationId(),
-                                                          oauthToken.getName());
+                oauthToken.getName());
 
         String jwtAccessToken = oAuth2Client.getAccessToken().getTokenValue();
         log.info("JWT Access Token: {}", jwtAccessToken);
@@ -64,10 +69,10 @@ public class AlbumsController {
         HttpEntity<List<Album>> httpEntity = new HttpEntity<>(headers);
 
         ResponseEntity<List<Album>> responseEntity =
-            restTemplate.exchange(apiGatewayAlbumsRouteUrl,
-                    HttpMethod.GET,
-                    httpEntity,
-                    new ParameterizedTypeReference<>() {});
+                restTemplate.exchange(apiGatewayAlbumsRouteUrl,
+                        HttpMethod.GET,
+                        httpEntity,
+                        new ParameterizedTypeReference<>() {});
 
 
 
@@ -83,6 +88,21 @@ public class AlbumsController {
 //                .build();
 //        model.addAttribute("albums", Arrays.asList(albumOne, albumTwo));
         model.addAttribute("albums", responseEntity.getBody());
+        return "albums";
+    }
+
+    @GetMapping("/albums")
+    public String getAlbums(Model model,
+                            @AuthenticationPrincipal OidcUser principal) {
+        String apiGatewayAlbumsRouteUrl = "http://localhost:8082/albums";
+
+        List<Album> albums = webClient.get()
+                .uri(apiGatewayAlbumsRouteUrl)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<List<Album>>(){})
+                .block();
+
+        model.addAttribute("albums", albums);
         return "albums";
     }
 
